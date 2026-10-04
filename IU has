@@ -1,0 +1,318 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "IU has",
+   LoadingTitle = "IU has Script Hub",
+   LoadingSubtitle = "by Assistant",
+   ConfigurationSaving = {
+      Enabled = false,
+   },
+   Discord = {
+      Enabled = false,
+   },
+   KeySystem = false
+})
+
+----------------------------------------------------------------
+-- ปุ่มเปิด/ปิด UI วงกลมเท่ๆ "AS" สำหรับมือถือ & เดลต้า
+----------------------------------------------------------------
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ลบปุ่มเก่าถ้ามีอยู่
+if CoreGui:FindFirstChild("AS_ToggleButton") then
+    CoreGui:FindFirstChild("AS_ToggleButton"):Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AS_ToggleButton"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ASBtn"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ToggleBtn.Text = "AS"
+ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 200)
+ToggleBtn.TextSize = 22
+ToggleBtn.Font = Enum.Font.FredokaOne
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(1, 0)
+UICorner.Parent = ToggleBtn
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Parent = ToggleBtn
+UIStroke.Color = Color3.fromRGB(0, 255, 200)
+UIStroke.Thickness = 2.5
+UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+-- กดปุ่มเพื่อ สลับ เปิด/ปิด หน้าต่าง UI
+ToggleBtn.MouseButton1Click:Connect(function()
+    Rayfield:ToggleUI()
+end)
+
+----------------------------------------------------------------
+-- ตัวแปรระบบทำงานภายใน
+----------------------------------------------------------------
+local AutoSteal = false
+local SelectedEgg = ""
+local FlySpeed = 100
+local FastPick = false
+local NoDismissal = false
+local CloneActive = false
+
+-- ค้นหาจุด Safe Zone ในแมพ (ปรับชื่อตามแมพที่เล่นได้)
+local function GetSafeZone()
+    return workspace:FindFirstChild("SafeZone") 
+        or workspace:FindFirstChild("Safezone") 
+        or workspace:FindFirstChild("SpawnLocation") 
+        or workspace:FindFirstChild("Spawn") 
+        or LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+end
+
+-- ดึงรายการไข่ทั้งหมดใน workspace
+local function GetEggList()
+    local eggs = {}
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Model") and string.find(string.lower(v.Name), "egg") then
+            table.insert(eggs, v.Name)
+        end
+    end
+    if #eggs == 0 then eggs = {"ไม่พบ Egg ในระยะ"} end
+    return eggs
+end
+
+----------------------------------------------------------------
+-- Tab 1: ขโมยไข่
+----------------------------------------------------------------
+local StealTab = Window:CreateTab("ขโมยไข่", 4483362458)
+
+local EggDropdown = StealTab:CreateDropdown({
+   Name = "เลือก Egg ที่ต้องการขโมย",
+   Options = GetEggList(),
+   CurrentOption = {"เลือกไข่"},
+   MultipleOptions = false,
+   Callback = function(Option)
+      SelectedEgg = Option[1]
+   end,
+})
+
+StealTab:CreateButton({
+   Name = "🔄 รีเฟรชรายชื่อ Egg",
+   Callback = function()
+      EggDropdown:Refresh(GetEggList())
+   end,
+})
+
+StealTab:CreateSlider({
+   Name = "ความเร็วบินขโมย (1-900)",
+   Range = {1, 900},
+   Increment = 1,
+   Suffix = "Speed",
+   CurrentValue = 100,
+   Callback = function(Value)
+      FlySpeed = Value
+   end,
+})
+
+StealTab:CreateToggle({
+   Name = "เริ่มการขโมยไข่อัตโนมัติ",
+   CurrentValue = false,
+   Callback = function(Value)
+      AutoSteal = Value
+      if AutoSteal then
+         task.spawn(function()
+            while AutoSteal do
+               task.wait(0.1)
+               local char = LocalPlayer.Character
+               if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
+               local hrp = char.HumanoidRootPart
+               
+               -- ค้นหา Object ไข่
+               local targetEgg = nil
+               for _, v in pairs(workspace:GetDescendants()) do
+                  if v:IsA("Model") and v.Name == SelectedEgg and v:FindFirstChildWhichIsA("BasePart") then
+                     targetEgg = v
+                     break
+                  end
+               end
+               
+               if targetEgg then
+                  local eggPart = targetEgg:FindFirstChildWhichIsA("BasePart")
+                  
+                  -- 1. บินขึ้นเล็กน้อยและบินไปหา Egg
+                  hrp.CFrame = hrp.CFrame + Vector3.new(0, 10, 0)
+                  task.wait(0.2)
+                  
+                  local dist = (hrp.Position - eggPart.Position).Magnitude
+                  local duration = math.clamp(dist / FlySpeed, 0.1, 30)
+                  
+                  local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+                  local tween = TweenService:Create(hrp, tweenInfo, {CFrame = eggPart.CFrame + Vector3.new(0, 3, 0)})
+                  tween:Play()
+                  tween.Completed:Wait()
+                  
+                  -- 2. กดหยิบ ProximityPrompt
+                  local prompt = targetEgg:FindFirstChildWhichIsA("ProximityPrompt", true)
+                  if prompt then
+                     fireproximityprompt(prompt)
+                  end
+                  task.wait(0.3)
+                  
+                  -- 3. บินกลับ Safe Zone
+                  local safeZone = GetSafeZone()
+                  if safeZone then
+                     local safeCFrame = safeZone:IsA("BasePart") and safeZone.CFrame or safeZone.Position
+                     
+                     -- เงื่อนไขสปีด 100-900: ทิ้งแล้วลงไปเก็บซ้ำระหว่างทาง
+                     if FlySpeed >= 100 then
+                        local startPos = hrp.Position
+                        local endPos = safeCFrame.Position
+                        local totalDist = (endPos - startPos).Magnitude
+                        local steps = math.floor(totalDist / 50) -- ทิ้งและเก็บทุกๆ 50 หน่วย
+                        
+                        for i = 1, steps do
+                           if not AutoSteal then break end
+                           
+                           -- บินไปกลางทาง
+                           local nextPos = startPos:Lerp(endPos, i / steps)
+                           hrp.CFrame = CFrame.new(nextPos)
+                           task.wait(0.1)
+                           
+                           -- จำลองการกดคำว่า "ทิ้ง" บนหน้าจอ (Drop Item)
+                           local backPackTool = char:FindFirstChildOfClass("Tool")
+                           if backPackTool then
+                              backPackTool.Parent = workspace
+                           end
+                           
+                           -- บินลงมาหา Egg ที่กดทิ้งแล้วกด E หยิบขึ้นมาใหม่
+                           local droppedEgg = workspace:FindFirstChild(SelectedEgg) or targetEgg
+                           if droppedEgg and droppedEgg:FindFirstChildWhichIsA("BasePart") then
+                              local dropPart = droppedEgg:FindFirstChildWhichIsA("BasePart")
+                              hrp.CFrame = dropPart.CFrame + Vector3.new(0, 2, 0)
+                              task.wait(0.2)
+                              
+                              local dropPrompt = droppedEgg:FindFirstChildWhichIsA("ProximityPrompt", true)
+                              if dropPrompt then
+                                 fireproximityprompt(dropPrompt)
+                              end
+                              task.wait(0.2)
+                           end
+                        end
+                     end
+                     
+                     -- บินเข้า Safe Zone สมบูรณ์
+                     local finalTween = TweenService:Create(hrp, TweenInfo.new(1, Enum.EasingStyle.Linear), {CFrame = safeCFrame + Vector3.new(0, 3, 0)})
+                     finalTween:Play()
+                     finalTween.Completed:Wait()
+                  end
+               end
+            end
+         end)
+      end
+   end,
+})
+
+----------------------------------------------------------------
+-- Tab 2: ฟังค์ชันเสริม (หยิบไว / No Dismissal)
+----------------------------------------------------------------
+local UtilityTab = Window:CreateTab("ฟังค์ชันเสริม", 4483362458)
+
+UtilityTab:CreateToggle({
+   Name = "หยิบไข่ไว ( Instant Pick )",
+   CurrentValue = false,
+   Callback = function(Value)
+      FastPick = Value
+      task.spawn(function()
+         while FastPick do
+            task.wait(0.2)
+            for _, prompt in pairs(workspace:GetDescendants()) do
+               if prompt:IsA("ProximityPrompt") then
+                  if FastPick then
+                     prompt.HoldDuration = 0
+                  end
+               end
+            end
+         end
+      end)
+   end,
+})
+
+UtilityTab:CreateToggle({
+   Name = "No dismissal (ระบบสร้างร่างโคลนวิ่ง)",
+   CurrentValue = false,
+   Callback = function(Value)
+      NoDismissal = Value
+   end,
+})
+
+-- ตรวจจับเมื่อผู้ใช้ไปกดหยิบ Egg ขณะเปิด No dismissal
+game:GetService("ProximityPromptService").PromptButtonHoldBegan:Connect(function(prompt, player)
+   if player == LocalPlayer and NoDismissal and not CloneActive then
+      CloneActive = true
+      
+      local char = LocalPlayer.Character
+      if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+      local hrp = char.HumanoidRootPart
+      local humanoid = char:FindFirstChildOfClass("Humanoid")
+      
+      -- ล็อกตัวละครหลัก ห้ามขยับ ห้ามหันจอ
+      hrp.Anchored = true
+      if humanoid then humanoid.WalkSpeed = 0 end
+      
+      -- สร้างร่างโคลน (Clone)
+      char.Archivable = true
+      local cloneChar = char:Clone()
+      cloneChar.Name = LocalPlayer.Name .. "_Clone"
+      cloneChar.Parent = workspace
+      char.Archivable = false
+      
+      local cloneHrp = cloneChar:FindFirstChild("HumanoidRootPart")
+      local cloneHumanoid = cloneChar:FindFirstChildOfClass("Humanoid")
+      
+      if cloneHrp and cloneHumanoid then
+         -- วิ่งด้วยความเร็วมากๆๆๆๆๆ ไป safe zone
+         cloneHumanoid.WalkSpeed = 500
+         local safeZone = GetSafeZone()
+         if safeZone then
+            local targetPos = safeZone:IsA("BasePart") and safeZone.Position or safeZone.Position
+            cloneHumanoid:MoveTo(targetPos)
+            
+            -- รอจนกว่าร่างโคลนจะวิ่งเข้าถึง Safe zone
+            local reached = false
+            local conn
+            conn = cloneHumanoid.MoveToFinished:Connect(function()
+               reached = true
+               if conn then conn:Disconnect() end
+            end)
+            
+            repeat task.wait(0.1) until reached or (cloneHrp.Position - targetPos).Magnitude < 10
+            
+            -- เมื่อเข้า safe zone แล้ว ลบร่างโคลนออก และปลดล็อกตัวละครหลัก
+            cloneChar:Destroy()
+            hrp.Anchored = false
+            if humanoid then humanoid.WalkSpeed = 16 end
+            CloneActive = false
+         end
+      else
+         hrp.Anchored = false
+         if humanoid then humanoid.WalkSpeed = 16 end
+         CloneActive = false
+      end
+   end
+end)
+
+Rayfield:Notify({
+   Title = "IU has Loaded",
+   Content = "สคริปต์โหลดเสร็จสิ้น! กดปุ่ม AS วงกลมเพื่อเปิด-ปิด",
+   Duration = 5,
+   Image = 4483362458,
+})
